@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Get Supabase URL and anon key from environment variables
-const supabaseUrl = 'https://ridfkjjfevslrpjegisf.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpZGZrampmZXZzbHJwamVnaXNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI3OTA1NzIsImV4cCI6MjA1ODM2NjU3Mn0.tmhyOkwtuuLFPS932DE82jYAmcBAQ6QALZP5Daqh3x8';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Log for debugging (will be removed in production)
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials not found in environment variables.');
+}
 
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

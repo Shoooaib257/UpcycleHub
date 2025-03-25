@@ -134,12 +134,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
       
+      // Store user in session
+      if (req.session) {
+        req.session.userId = user.id;
+      }
+      
       // Remove password from the response
       const { password: _, ...userWithoutPassword } = user;
       
       res.status(200).json({ user: userWithoutPassword });
     } catch (error) {
       res.status(500).json({ message: 'Login failed' });
+    }
+  });
+  
+  // Get currently logged in user
+  app.get('/api/auth/me', async (req, res) => {
+    try {
+      // Check if user is logged in through session
+      if (!req.session || !req.session.userId) {
+        return res.status(401).json({ message: 'Not authenticated' });
+      }
+      
+      // Get user from storage
+      const user = await storage.getUser(req.session.userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Return user data without password
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
+    } catch (error) {
+      console.error("Get me error:", error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
+  // Logout user
+  app.post('/api/auth/logout', (req, res) => {
+    try {
+      if (req.session) {
+        req.session.destroy((err) => {
+          if (err) {
+            return res.status(500).json({ message: 'Failed to logout' });
+          }
+          res.json({ message: 'Logged out successfully' });
+        });
+      } else {
+        res.json({ message: 'No active session' });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: 'Internal server error' });
     }
   });
 
