@@ -15,38 +15,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Bucket name constant for easier management
 const BUCKET_NAME = 'upcycle-hub';
 
-// Function to ensure the bucket exists before uploading
-async function ensureBucketExists(): Promise<boolean> {
+// Function to check if bucket exists and is accessible
+async function isBucketAccessible(): Promise<boolean> {
   try {
-    // Check if the bucket exists
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    
-    if (listError) {
-      console.error('Error checking buckets:', listError);
-      return false;
+    // First try to list bucket content to see if it exists and is accessible
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list();
+      
+    if (error) {
+      console.log('Bucket access check error (might just mean the bucket is empty):', error);
+      // This could mean the bucket doesn't exist OR it's just empty,
+      // let's continue and try to upload anyway
+      return true;  // Continue with upload attempt
     }
     
-    // Check if our bucket already exists
-    const bucketExists = buckets.some(bucket => bucket.name === BUCKET_NAME);
-    
-    if (!bucketExists) {
-      // Create the bucket if it doesn't exist
-      const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-      });
-      
-      if (createError) {
-        console.error('Error creating bucket:', createError);
-        return false;
-      }
-      
-      console.log(`Bucket '${BUCKET_NAME}' created successfully.`);
-    }
-    
-    return true;
+    return true;  // Bucket exists and is accessible
   } catch (error) {
-    console.error('Error in ensureBucketExists:', error);
+    console.error('Error checking bucket accessibility:', error);
     return false;
   }
 }
@@ -54,10 +40,10 @@ async function ensureBucketExists(): Promise<boolean> {
 // Function to upload product image to Supabase storage
 export async function uploadProductImage(file: File, productId: string): Promise<string | null> {
   try {
-    // Ensure bucket exists before attempting upload
-    const bucketReady = await ensureBucketExists();
-    if (!bucketReady) {
-      console.error('Bucket not ready for upload.');
+    // Check if the bucket is accessible
+    const isAccessible = await isBucketAccessible();
+    if (!isAccessible) {
+      console.error('Bucket is not accessible.');
       return null;
     }
     
@@ -65,6 +51,7 @@ export async function uploadProductImage(file: File, productId: string): Promise
     const fileName = `${productId}/${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = `product-images/${fileName}`;
 
+    // Attempt the upload directly
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(filePath, file, {
@@ -74,6 +61,17 @@ export async function uploadProductImage(file: File, productId: string): Promise
 
     if (error) {
       console.error('Error uploading file:', error);
+      
+      // If it's a bucket not found error, let the user know
+      if (error.message.includes('not found')) {
+        console.error('The bucket does not exist. Please create it in the Supabase dashboard.');
+      }
+      
+      // If it's a permissions error, let the user know
+      if (error.message.includes('security policy')) {
+        console.error('Permission denied. Please check Row Level Security policies in Supabase.');
+      }
+      
       return null;
     }
 
@@ -92,10 +90,10 @@ export async function uploadProductImage(file: File, productId: string): Promise
 // Function to delete product image from Supabase storage
 export async function deleteProductImage(imageUrl: string): Promise<boolean> {
   try {
-    // Ensure bucket exists first
-    const bucketReady = await ensureBucketExists();
-    if (!bucketReady) {
-      console.error('Bucket not ready for deletion operation.');
+    // Check if the bucket is accessible
+    const isAccessible = await isBucketAccessible();
+    if (!isAccessible) {
+      console.error('Bucket is not accessible for deletion.');
       return false;
     }
     

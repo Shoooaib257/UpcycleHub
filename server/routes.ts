@@ -339,6 +339,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to fetch images' });
     }
   });
+  
+  // Simple in-memory image storage as fallback when Supabase storage isn't working
+  const inMemoryImages = new Map<string, { data: string, contentType: string }>();
+  
+  app.post('/api/products/upload-image', async (req, res) => {
+    try {
+      if (!req.files || Object.keys(req.files).length === 0) {
+        // If raw file data is included in the request body (e.g. data URL)
+        if (req.body.imageData && req.body.productId) {
+          const imageId = `${req.body.productId}-${Date.now()}`;
+          const imageData = req.body.imageData.toString();
+          
+          // Store the data URL directly
+          inMemoryImages.set(imageId, {
+            data: imageData,
+            contentType: 'image/png' // Assume PNG for data URLs
+          });
+          
+          // Store in our database too
+          await storage.createProductImage({
+            productId: parseInt(req.body.productId),
+            url: `data:${imageId}`, // Use a custom URI scheme
+            isMain: req.body.isMain === 'true'
+          });
+          
+          return res.status(200).json({ 
+            imageUrl: imageData,
+            message: 'Image uploaded successfully (data URL)' 
+          });
+        }
+        
+        return res.status(400).json({ message: 'No files were uploaded' });
+      }
+      
+      const productId = req.body.productId;
+      const isMain = req.body.isMain === 'true';
+      
+      if (!productId) {
+        return res.status(400).json({ message: 'Product ID is required' });
+      }
+      
+      // Handle the uploaded file
+      const file = req.files.file;
+      const imageId = `${productId}-${Date.now()}`;
+      const contentType = file.mimetype;
+      
+      // For simplicity, just store in memory (would normally use disk)
+      inMemoryImages.set(imageId, {
+        data: file.data.toString('base64'),
+        contentType
+      });
+      
+      // Also store reference in our database
+      await storage.createProductImage({
+        productId: parseInt(productId),
+        url: `/api/images/${imageId}`, // URL to access this image
+        isMain
+      });
+      
+      res.status(200).json({ 
+        imageUrl: `/api/images/${imageId}`,
+        message: 'Image uploaded successfully' 
+      });
+    } catch (error) {
+      console.error('Error handling file upload:', error);
+      res.status(500).json({ message: 'Failed to upload image' });
+    }
+  });
+  
+  // Serve the in-memory images
+  app.get('/api/images/:id', (req, res) => {
+    try {
+      const imageId = req.params.id;
+      const image = inMemoryImages.get(imageId);
+      
+      if (!image) {
+        return res.status(404).json({ message: 'Image not found' });
+      }
+      
+      // For data URLs (simple case)
+      if (image.data.startsWith('data:')) {
+        // Redirect to the data URL
+        return res.redirect(image.data);
+      }
+      
+      // Set content type and send base64 data
+      res.set('Content-Type', image.contentType);
+      res.send(Buffer.from(image.data, 'base64'));
+    } catch (error) {
+      console.error('Error serving image:', error);
+      res.status(500).json({ message: 'Failed to serve image' });
+    }
+  });
 
   // Conversation Routes
   app.get('/api/conversations', async (req, res) => {

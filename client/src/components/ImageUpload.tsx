@@ -35,16 +35,40 @@ const ImageUpload = ({
     // Upload the image
     setIsUploading(true);
     try {
+      // Try to upload to Supabase first
       const imageUrl = await uploadProductImage(file, productId);
+      
       if (imageUrl) {
+        // Successful upload
         onImageUploaded(imageUrl, isMainUpload);
         // Clear the file input
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
+      } else {
+        // If Supabase upload fails, use the data URL (preview) as a fallback
+        console.log("Supabase upload failed, using data URL as fallback");
+        // Wait for preview to be set before using it
+        if (preview) {
+          onImageUploaded(preview, isMainUpload);
+          console.log("Using data URL fallback for image");
+        } else {
+          // If no preview yet, wait a bit for it
+          setTimeout(() => {
+            if (preview) {
+              onImageUploaded(preview, isMainUpload);
+              console.log("Using delayed data URL fallback for image");
+            }
+          }, 500);
+        }
       }
     } catch (error) {
       console.error("Error uploading image:", error);
+      // Try data URL fallback on error too
+      if (preview) {
+        onImageUploaded(preview, isMainUpload);
+        console.log("Using data URL fallback after error");
+      }
     } finally {
       setIsUploading(false);
     }
