@@ -217,7 +217,7 @@ const AddProduct = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Select a category</SelectItem>
+                        <SelectItem value="select_category">Select a category</SelectItem>
                         <SelectItem value="Clothing">Clothing</SelectItem>
                         <SelectItem value="Electronics">Electronics</SelectItem>
                         <SelectItem value="Furniture">Furniture</SelectItem>
@@ -271,7 +271,7 @@ const AddProduct = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Select condition</SelectItem>
+                        <SelectItem value="select_condition">Select condition</SelectItem>
                         <SelectItem value="New">New</SelectItem>
                         <SelectItem value="Like New">Like New</SelectItem>
                         <SelectItem value="Excellent">Excellent</SelectItem>

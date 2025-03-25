@@ -121,7 +121,7 @@ const Browse = () => {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Categories</SelectItem>
+                <SelectItem value="all">All Categories</SelectItem>
                 <SelectItem value="Clothing">Clothing</SelectItem>
                 <SelectItem value="Electronics">Electronics</SelectItem>
                 <SelectItem value="Furniture">Furniture</SelectItem>

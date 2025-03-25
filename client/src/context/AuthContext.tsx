@@ -30,20 +30,79 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Try to get the user from localStorage
-        const savedUser = localStorage.getItem("user");
+        // First, check Supabase session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
+        if (sessionError) {
+          console.error("Error getting session:", sessionError);
+          throw sessionError;
+        }
+        
+        if (session) {
+          // We have a Supabase session - get user details from our API
+          const res = await apiRequest("GET", "/api/auth/me", undefined);
+          const data = await res.json();
+          
+          if (data.user) {
+            setUser(data.user);
+            localStorage.setItem("user", JSON.stringify(data.user));
+          } else {
+            // Fallback to localStorage if API fails
+            const savedUser = localStorage.getItem("user");
+            if (savedUser) {
+              setUser(JSON.parse(savedUser));
+            }
+          }
+        } else {
+          // No Supabase session, try localStorage as fallback
+          const savedUser = localStorage.getItem("user");
+          if (savedUser) {
+            setUser(JSON.parse(savedUser));
+          }
         }
       } catch (error) {
         console.error("Error checking user:", error);
+        
+        // Last resort - try localStorage
+        const savedUser = localStorage.getItem("user");
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
+    // Set up auth state subscription
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          // User signed in via Supabase - fetch user details from API
+          try {
+            const res = await apiRequest("GET", "/api/auth/me", undefined);
+            const data = await res.json();
+            
+            if (data.user) {
+              setUser(data.user);
+              localStorage.setItem("user", JSON.stringify(data.user));
+            }
+          } catch (error) {
+            console.error("Error fetching user after sign in:", error);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          // User signed out of Supabase - clear local state
+          setUser(null);
+          localStorage.removeItem("user");
+        }
+      }
+    );
+
     checkUser();
+    
+    // Clean up subscription
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Login function
