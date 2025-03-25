@@ -39,35 +39,77 @@ const ImageUpload = ({
       const imageUrl = await uploadProductImage(file, productId);
       
       if (imageUrl) {
-        // Successful upload
+        // Successful upload to Supabase
+        console.log("Supabase upload successful");
         onImageUploaded(imageUrl, isMainUpload);
         // Clear the file input
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
       } else {
-        // If Supabase upload fails, use the data URL (preview) as a fallback
-        console.log("Supabase upload failed, using data URL as fallback");
-        // Wait for preview to be set before using it
+        console.log("Supabase upload failed, trying server upload...");
+        
+        // If Supabase fails, try the server upload first
+        try {
+          // Create a FormData object to send the file
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('productId', productId);
+          formData.append('isMain', isMainUpload.toString());
+          
+          // Try uploading to our server endpoint
+          const response = await fetch('/api/products/upload-image', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log("Server upload successful", data);
+            onImageUploaded(data.imageUrl, isMainUpload);
+            return;
+          }
+        } catch (serverError) {
+          console.error("Server upload failed:", serverError);
+        }
+        
+        // If server upload also fails, try uploading the preview data URL as last resort
+        console.log("Trying data URL upload as last resort");
         if (preview) {
-          onImageUploaded(preview, isMainUpload);
-          console.log("Using data URL fallback for image");
-        } else {
-          // If no preview yet, wait a bit for it
-          setTimeout(() => {
-            if (preview) {
-              onImageUploaded(preview, isMainUpload);
-              console.log("Using delayed data URL fallback for image");
+          try {
+            const response = await fetch('/api/products/upload-data-url', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                dataUrl: preview,
+                productId,
+                isMain: isMainUpload
+              }),
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              console.log("Data URL upload successful", data);
+              onImageUploaded(data.imageUrl, isMainUpload);
+              return;
             }
-          }, 500);
+          } catch (dataUrlError) {
+            console.error("Data URL upload failed:", dataUrlError);
+          }
+          
+          // If all server methods fail, use the data URL directly as absolute last resort
+          console.log("All server methods failed, using data URL directly");
+          onImageUploaded(preview, isMainUpload);
         }
       }
     } catch (error) {
-      console.error("Error uploading image:", error);
-      // Try data URL fallback on error too
+      console.error("Error in main upload flow:", error);
+      // Final fallback - use the preview directly if everything else failed
       if (preview) {
+        console.log("Using preview directly after all methods failed");
         onImageUploaded(preview, isMainUpload);
-        console.log("Using data URL fallback after error");
       }
     } finally {
       setIsUploading(false);

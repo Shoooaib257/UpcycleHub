@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { WebSocketServer } from "ws";
@@ -11,6 +11,7 @@ import {
   insertMessageSchema
 } from "@shared/schema";
 import { z } from "zod";
+import { UploadedFile } from "express-fileupload";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -344,8 +345,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const inMemoryImages = new Map<string, { data: string, contentType: string }>();
   
   app.post('/api/products/upload-image', async (req, res) => {
+    // TypeScript type workaround
+    const reqWithFiles = req as any;
     try {
-      if (!req.files || Object.keys(req.files).length === 0) {
+      if (!reqWithFiles.files || Object.keys(reqWithFiles.files).length === 0) {
         // If raw file data is included in the request body (e.g. data URL)
         if (req.body.imageData && req.body.productId) {
           const imageId = `${req.body.productId}-${Date.now()}`;
@@ -381,7 +384,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle the uploaded file
-      const file = req.files.file;
+      const fileField = reqWithFiles.files.file;
+      
+      // Check if it's an array or single file
+      if (Array.isArray(fileField)) {
+        return res.status(400).json({ message: 'Only one file is allowed' });
+      }
+      
+      const file = fileField;
       const imageId = `${productId}-${Date.now()}`;
       const contentType = file.mimetype;
       
@@ -408,6 +418,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Upload data URL directly (for fallback when file upload doesn't work)
+  app.post('/api/products/upload-data-url', async (req, res) => {
+    try {
+      const { dataUrl, productId, isMain } = req.body;
+      
+      if (!dataUrl || !productId) {
+        return res.status(400).json({ message: 'Data URL and product ID are required' });
+      }
+      
+      const imageId = `${productId}-${Date.now()}`;
+      
+      // Store the data URL
+      inMemoryImages.set(imageId, {
+        data: dataUrl,
+        contentType: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg'
+      });
+      
+      // Also store in database
+      await storage.createProductImage({
+        productId: parseInt(productId),
+        url: `/api/images/${imageId}`,
+        isMain: isMain === true || isMain === 'true'
+      });
+      
+      res.status(200).json({ 
+        imageUrl: `/api/images/${imageId}`,
+        message: 'Image uploaded successfully (data URL fallback)'
+      });
+    } catch (error) {
+      console.error('Error handling data URL upload:', error);
+      res.status(500).json({ message: 'Failed to upload image data' });
+    }
+  });
+
   // Serve the in-memory images
   app.get('/api/images/:id', (req, res) => {
     try {
