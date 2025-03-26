@@ -4,7 +4,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Get Supabase URL and anon key from environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const siteUrl = import.meta.env.VITE_SITE_URL || 'https://67e3da5e67eec850e4da81fa--upcyclehub.netlify.app';
 
 // Create Supabase client lazily to reduce initial load
 let supabaseInstance: SupabaseClient | null = null;
