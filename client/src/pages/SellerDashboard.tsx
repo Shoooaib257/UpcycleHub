@@ -2,13 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
 } from "@/components/ui/card";
 import {
   Table,
@@ -38,8 +37,6 @@ import {
   Package, 
   Eye, 
   MessageCircle, 
-  Edit, 
-  Trash, 
   MoreHorizontal,
   Plus,
 } from "lucide-react";
@@ -50,6 +47,7 @@ const SellerDashboard = () => {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [productToDelete, setProductToDelete] = useState<number | null>(null);
+  const supabase = getSupabase();
 
   // Redirect if not a seller
   if (user && !user.isSeller) {
@@ -59,28 +57,41 @@ const SellerDashboard = () => {
 
   // Fetch seller products
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/products/seller'],
+    queryKey: ['seller-products', user?.id],
     queryFn: async () => {
-      // In a real implementation, this would fetch only the user's listings
-      // For now, we'll fetch all products and filter on the client side
-      const res = await apiRequest('GET', '/api/products', undefined);
-      const data = await res.json();
-      return {
-        ...data,
-        products: data.products.filter((p: any) => p.sellerId === user?.id)
-      };
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('seller_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return { products: products || [] };
     },
-    enabled: Boolean(user),
+    enabled: Boolean(user?.id),
   });
 
   // Delete product mutation
   const deleteProduct = useMutation({
     mutationFn: async (productId: number) => {
-      const res = await apiRequest('DELETE', `/api/products/${productId}`, undefined);
-      return res.json();
+      // First delete associated images
+      const { error: imagesError } = await supabase
+        .from('product_images')
+        .delete()
+        .eq('product_id', productId);
+
+      if (imagesError) throw imagesError;
+
+      // Then delete the product
+      const { error: productError } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId)
+        .eq('seller_id', user?.id); // Ensure user owns the product
+
+      if (productError) throw productError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/products/seller'] });
       toast({
         title: "Product deleted",
         description: "Your listing has been removed successfully."
@@ -206,7 +217,7 @@ const SellerDashboard = () => {
       </div>
 
       {/* Product listings table */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+      <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="px-4 py-5 sm:px-6 border-b border-neutral-200">
           <h3 className="text-lg leading-6 font-medium text-neutral-900">Your Listed Items</h3>
         </div>
@@ -279,12 +290,12 @@ const SellerDashboard = () => {
                   </TableCell>
                   <TableCell className="text-sm text-neutral-500">{product.views || 0}</TableCell>
                   <TableCell className="text-sm text-neutral-500">
-                    {product.createdAt 
-                      ? format(new Date(product.createdAt), 'MMM d, yyyy')
+                    {product.created_at 
+                      ? format(new Date(product.created_at), 'MMM d, yyyy')
                       : 'Recently'
                     }
                   </TableCell>
-                  <TableCell className="text-right text-sm font-medium">
+                  <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm">
@@ -315,7 +326,7 @@ const SellerDashboard = () => {
       </div>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={productToDelete !== null} onOpenChange={(open) => !open && setProductToDelete(null)}>
+      <AlertDialog open={productToDelete !== null} onOpenChange={() => setProductToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
