@@ -1,0 +1,3 @@
+[33m6e02682[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: simplify Supabase auth configuration and improve signup flow
+[33mfb114b7[m refactor: simplify auth flow to use Supabase directly
+[33m9d2dbb8[m feat: add email verification support with Supabase

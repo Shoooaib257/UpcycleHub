@@ -25,16 +25,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing user session on load
   useEffect(() => {
+    const supabase = getSupabase();
+    
     const checkUser = async () => {
       try {
-        const supabase = getSupabase();
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (sessionError) {
-          console.error("Error getting session:", sessionError);
-          throw sessionError;
+        if (error) {
+          throw error;
         }
         
         if (session?.user) {
@@ -50,30 +49,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             createdAt: new Date(session.user.created_at)
           };
           setUser(userData);
-          localStorage.setItem("user", JSON.stringify(userData));
-        } else {
-          const savedUser = localStorage.getItem("user");
-          if (savedUser) {
-            setUser(JSON.parse(savedUser));
-          }
         }
       } catch (error) {
-        console.error("Error checking user:", error);
-        const savedUser = localStorage.getItem("user");
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
-        }
+        console.error('Error checking session:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    const supabase = getSupabase();
-    
-    // Set up auth state subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
+        if (session?.user) {
           const userData: User = {
             id: parseInt(session.user.id),
             uuid: session.user.id,
@@ -86,16 +72,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             createdAt: new Date(session.user.created_at)
           };
           setUser(userData);
-          localStorage.setItem("user", JSON.stringify(userData));
-        } else if (event === 'SIGNED_OUT') {
+        } else {
           setUser(null);
-          localStorage.removeItem("user");
         }
       }
     );
 
     checkUser();
-    
+
     return () => {
       subscription.unsubscribe();
     };
@@ -109,16 +93,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email,
         password
       });
-      
-      if (error) {
-        throw error;
-      }
 
-      if (!data.user) {
-        throw new Error("Login failed - no user data returned");
-      }
+      if (error) throw error;
+      if (!data.user) throw new Error('No user data returned');
+
     } catch (error) {
-      console.error("Login error:", error);
+      console.error('Login error:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -130,7 +110,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const supabase = getSupabase();
       
-      // Sign up with Supabase
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -143,36 +122,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       });
-      
-      if (error) {
-        console.error("Signup error:", error);
-        throw new Error(error.message);
-      }
 
-      if (!data.user) {
-        throw new Error("Signup failed - no user data returned");
-      }
+      if (error) throw error;
+      if (!data.user) throw new Error('No user data returned');
 
-      // Create user object from Supabase data
-      const newUser: User = {
-        id: parseInt(data.user.id),
-        uuid: data.user.id,
-        email: data.user.email!,
-        username: userData.username,
-        fullName: userData.fullName,
-        avatar: null,
-        isSeller: userData.isSeller,
-        isCollector: userData.isCollector,
-        createdAt: new Date(data.user.created_at)
-      };
-
-      // Update local state
-      setUser(newUser);
-      localStorage.setItem("user", JSON.stringify(newUser));
-
-      return newUser;
     } catch (error) {
-      console.error("Signup error:", error);
+      console.error('Signup error:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -184,15 +139,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const supabase = getSupabase();
       const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        throw error;
-      }
-      
+      if (error) throw error;
       setUser(null);
-      localStorage.removeItem("user");
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error('Logout error:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -209,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };

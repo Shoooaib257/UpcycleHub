@@ -19,7 +19,6 @@ export const getSupabase = (): SupabaseClient => {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        storageKey: 'upcyclehub_auth',
         storage: window.localStorage
       }
     });
