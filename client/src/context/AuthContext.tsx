@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { apiRequest } from "@/lib/queryClient";
 import { getSupabase } from "@/lib/supabase";
 import { User } from "@shared/schema";
 
@@ -30,10 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // Get Supabase client
         const supabase = getSupabase();
-        
-        // First, check Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -41,23 +37,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           throw sessionError;
         }
         
-        if (session) {
-          // We have a Supabase session - get user details from our API
-          const res = await apiRequest("GET", "/api/auth/me", undefined);
-          const data = await res.json();
-          
-          if (data.user) {
-            setUser(data.user);
-            localStorage.setItem("user", JSON.stringify(data.user));
-          } else {
-            // Fallback to localStorage if API fails
-            const savedUser = localStorage.getItem("user");
-            if (savedUser) {
-              setUser(JSON.parse(savedUser));
-            }
-          }
+        if (session?.user) {
+          const userData: User = {
+            id: parseInt(session.user.id),
+            uuid: session.user.id,
+            email: session.user.email!,
+            username: session.user.user_metadata.username || '',
+            fullName: session.user.user_metadata.full_name || '',
+            avatar: session.user.user_metadata.avatar,
+            isSeller: session.user.user_metadata.is_seller || false,
+            isCollector: session.user.user_metadata.is_collector || false,
+            createdAt: new Date(session.user.created_at)
+          };
+          setUser(userData);
+          localStorage.setItem("user", JSON.stringify(userData));
         } else {
-          // No Supabase session, try localStorage as fallback
           const savedUser = localStorage.getItem("user");
           if (savedUser) {
             setUser(JSON.parse(savedUser));
@@ -65,8 +59,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error("Error checking user:", error);
-        
-        // Last resort - try localStorage
         const savedUser = localStorage.getItem("user");
         if (savedUser) {
           setUser(JSON.parse(savedUser));
@@ -76,27 +68,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    // Get Supabase client
     const supabase = getSupabase();
     
     // Set up auth state subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' && session) {
-          // User signed in via Supabase - fetch user details from API
-          try {
-            const res = await apiRequest("GET", "/api/auth/me", undefined);
-            const data = await res.json();
-            
-            if (data.user) {
-              setUser(data.user);
-              localStorage.setItem("user", JSON.stringify(data.user));
-            }
-          } catch (error) {
-            console.error("Error fetching user after sign in:", error);
-          }
+          const userData: User = {
+            id: parseInt(session.user.id),
+            uuid: session.user.id,
+            email: session.user.email!,
+            username: session.user.user_metadata.username || '',
+            fullName: session.user.user_metadata.full_name || '',
+            avatar: session.user.user_metadata.avatar,
+            isSeller: session.user.user_metadata.is_seller || false,
+            isCollector: session.user.user_metadata.is_collector || false,
+            createdAt: new Date(session.user.created_at)
+          };
+          setUser(userData);
+          localStorage.setItem("user", JSON.stringify(userData));
         } else if (event === 'SIGNED_OUT') {
-          // User signed out of Supabase - clear local state
           setUser(null);
           localStorage.removeItem("user");
         }
@@ -105,60 +96,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     checkUser();
     
-    // Clean up subscription
     return () => {
       subscription.unsubscribe();
     };
   }, []);
 
-  // Login function
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Get Supabase client
       const supabase = getSupabase();
-      
-      // First try Supabase authentication
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
-      if (supabaseError) {
-        console.error("Supabase login error:", supabaseError);
-        
-        // Fallback to our API endpoint if Supabase auth fails
-        const res = await apiRequest("POST", "/api/auth/login", { email, password });
-        const data = await res.json();
-        
-        if (!data.user) {
-          throw new Error(data.message || "Login failed");
-        }
-        
-        // Save the user to state and localStorage
-        setUser(data.user);
-        localStorage.setItem("user", JSON.stringify(data.user));
-      } else {
-        // Supabase auth successful
-        // Get user details from our API using Supabase session
-        const res = await apiRequest("GET", "/api/auth/me", undefined);
-        const data = await res.json();
-        
-        if (data.user) {
-          setUser(data.user);
-          localStorage.setItem("user", JSON.stringify(data.user));
-        } else {
-          // Fallback in case our API can't retrieve user details
-          const res = await apiRequest("POST", "/api/auth/login", { email, password });
-          const data = await res.json();
-          
-          if (!data.user) {
-            throw new Error("Failed to get user details after Supabase login");
-          }
-          
-          setUser(data.user);
-          localStorage.setItem("user", JSON.stringify(data.user));
-        }
+      if (error) {
+        throw error;
+      }
+
+      if (!data.user) {
+        throw new Error("Login failed - no user data returned");
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -168,15 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Signup function
   const signup = async (userData: SignupData) => {
     setIsLoading(true);
     try {
-      // Get Supabase client
       const supabase = getSupabase();
       
-      // First try to register with Supabase
-      const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -189,35 +143,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       });
       
-      if (supabaseError) {
-        console.error("Supabase signup error:", supabaseError);
-        
-        // Fallback to our API endpoint
-        const res = await apiRequest("POST", "/api/auth/register", userData);
-        const data = await res.json();
-        
-        if (!data.user) {
-          throw new Error(data.message || "Signup failed");
-        }
-        
-        // Save the user to state and localStorage
-        setUser(data.user);
-        localStorage.setItem("user", JSON.stringify(data.user));
-      } else {
-        // Supabase signup successful, now create user in our database
-        const res = await apiRequest("POST", "/api/auth/register", {
-          ...userData,
-          supabaseId: supabaseData.user?.id
-        });
-        const data = await res.json();
-        
-        if (!data.user) {
-          throw new Error(data.message || "Signup successful in Supabase but failed in our database");
-        }
-        
-        // Save the user to state and localStorage
-        setUser(data.user);
-        localStorage.setItem("user", JSON.stringify(data.user));
+      if (error) {
+        throw error;
+      }
+
+      if (!data.user) {
+        throw new Error("Signup failed - no user data returned");
       }
     } catch (error) {
       console.error("Signup error:", error);
@@ -227,31 +158,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Logout function
   const logout = async () => {
     setIsLoading(true);
     try {
-      // Get Supabase client
       const supabase = getSupabase();
+      const { error } = await supabase.auth.signOut();
       
-      // Sign out from Supabase
-      const { error: supabaseError } = await supabase.auth.signOut();
-      
-      if (supabaseError) {
-        console.error("Supabase logout error:", supabaseError);
+      if (error) {
+        throw error;
       }
       
-      // Clear the user from state and localStorage regardless of Supabase result
       setUser(null);
       localStorage.removeItem("user");
-      
-      // Also call our API logout endpoint if it exists
-      try {
-        await apiRequest("POST", "/api/auth/logout", undefined);
-      } catch (apiError) {
-        // Just log the error but don't prevent logout
-        console.error("API logout error:", apiError);
-      }
     } catch (error) {
       console.error("Logout error:", error);
       throw error;

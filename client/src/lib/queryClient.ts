@@ -1,5 +1,8 @@
 // Import only what we need to reduce bundle size
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+
+// Get API URL from environment variable or use a default for local development
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Simple utility to handle API responses
 async function throwIfResNotOk(res: Response) {
@@ -15,7 +18,10 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // Ensure URL starts with API_URL
+  const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+  
+  const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -34,7 +40,10 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> = (options) => {
   return async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
+    const url = queryKey[0] as string;
+    const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+    
+    const res = await fetch(fullUrl, {
       credentials: "include",
     });
 
@@ -51,7 +60,6 @@ export const getQueryFn: <T>(options: {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
       refetchOnWindowFocus: false,
       staleTime: 300000, // 5 minutes
       retry: false,
