@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -56,6 +56,7 @@ const AddProduct = () => {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [uploadedImages, setUploadedImages] = useState<{ url: string; isMain: boolean }[]>([]);
+  const supabase = getSupabase();
 
   // Redirect if not logged in or not a seller
   if (!user) {
@@ -83,7 +84,7 @@ const AddProduct = () => {
       category: "",
       condition: "",
       location: "",
-      sellerId: user.id,
+      seller_id: user.id,
       status: "active",
     },
   });
@@ -95,36 +96,40 @@ const AddProduct = () => {
       const priceInCents = Math.round(parseFloat(values.price) * 100);
       
       // Create the product
-      const res = await apiRequest("POST", "/api/products", {
-        ...values,
-        price: priceInCents,
-        sellerId: user.id,
-      });
-      
-      const data = await res.json();
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .insert({
+          ...values,
+          price: priceInCents,
+          seller_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (productError) throw productError;
       
       // Upload images for the product
       if (uploadedImages.length > 0) {
-        await Promise.all(
-          uploadedImages.map(async (image) => {
-            await apiRequest("POST", `/api/products/${data.product.id}/images`, {
+        const { error: imagesError } = await supabase
+          .from('product_images')
+          .insert(
+            uploadedImages.map(image => ({
+              product_id: product.id,
               url: image.url,
-              isMain: image.isMain,
-              productId: data.product.id,
-            });
-          })
-        );
+              is_main: image.isMain
+            }))
+          );
+
+        if (imagesError) throw imagesError;
       }
       
-      return data;
+      return { product };
     },
     onSuccess: () => {
       toast({
         title: "Product added",
         description: "Your item has been listed successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products/seller"] });
       navigate("/dashboard");
     },
     onError: (error: Error) => {
@@ -217,14 +222,12 @@ const AddProduct = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="select_category">Select a category</SelectItem>
-                        <SelectItem value="Clothing">Clothing</SelectItem>
-                        <SelectItem value="Electronics">Electronics</SelectItem>
-                        <SelectItem value="Furniture">Furniture</SelectItem>
-                        <SelectItem value="Home Goods">Home Goods</SelectItem>
-                        <SelectItem value="Photography">Photography</SelectItem>
-                        <SelectItem value="Vintage">Vintage</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
+                        <SelectItem value="furniture">Furniture</SelectItem>
+                        <SelectItem value="electronics">Electronics</SelectItem>
+                        <SelectItem value="clothing">Clothing</SelectItem>
+                        <SelectItem value="books">Books</SelectItem>
+                        <SelectItem value="art">Art</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -271,13 +274,11 @@ const AddProduct = () => {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="select_condition">Select condition</SelectItem>
-                        <SelectItem value="New">New</SelectItem>
-                        <SelectItem value="Like New">Like New</SelectItem>
-                        <SelectItem value="Excellent">Excellent</SelectItem>
-                        <SelectItem value="Good">Good</SelectItem>
-                        <SelectItem value="Fair">Fair</SelectItem>
-                        <SelectItem value="For Parts">For Parts</SelectItem>
+                        <SelectItem value="new">New</SelectItem>
+                        <SelectItem value="like-new">Like New</SelectItem>
+                        <SelectItem value="good">Good</SelectItem>
+                        <SelectItem value="fair">Fair</SelectItem>
+                        <SelectItem value="poor">Poor</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -315,7 +316,7 @@ const AddProduct = () => {
             <CardContent>
               <div className="grid grid-cols-2 gap-y-6 gap-x-4 sm:grid-cols-3">
                 <ImageUpload
-                  productId={`temp-${user.id}-${Date.now()}`}
+                  productId={parseInt(`9${user.id}${Date.now()}`)}
                   onImageUploaded={(url, isMain) => handleImageUploaded(url, true)}
                   isMainUpload={true}
                 />
@@ -323,7 +324,7 @@ const AddProduct = () => {
                 {[...Array(5)].map((_, index) => (
                   <ImageUpload
                     key={index}
-                    productId={`temp-${user.id}-${Date.now()}-${index}`}
+                    productId={parseInt(`9${user.id}${Date.now()}-${index}`)}
                     onImageUploaded={(url) => handleImageUploaded(url, false)}
                   />
                 ))}
