@@ -19,9 +19,8 @@ export const getSupabase = (): SupabaseClient => {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        flowType: 'pkce',
-        detectSessionInUrl: true,
-        redirectTo: `${siteUrl}/auth/callback`
+        storageKey: 'upcyclehub_auth',
+        storage: window.localStorage
       }
     });
   }

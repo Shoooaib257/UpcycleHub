@@ -130,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const supabase = getSupabase();
       
+      // Sign up with Supabase
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -144,12 +145,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       
       if (error) {
-        throw error;
+        console.error("Signup error:", error);
+        throw new Error(error.message);
       }
 
       if (!data.user) {
         throw new Error("Signup failed - no user data returned");
       }
+
+      // Create user object from Supabase data
+      const newUser: User = {
+        id: parseInt(data.user.id),
+        uuid: data.user.id,
+        email: data.user.email!,
+        username: userData.username,
+        fullName: userData.fullName,
+        avatar: null,
+        isSeller: userData.isSeller,
+        isCollector: userData.isCollector,
+        createdAt: new Date(data.user.created_at)
+      };
+
+      // Update local state
+      setUser(newUser);
+      localStorage.setItem("user", JSON.stringify(newUser));
+
+      return newUser;
     } catch (error) {
       console.error("Signup error:", error);
       throw error;
