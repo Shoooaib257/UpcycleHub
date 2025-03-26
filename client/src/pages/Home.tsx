@@ -4,37 +4,47 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import ProductGrid from "@/components/ProductGrid";
 import { Button } from "@/components/ui/button";
-import { apiRequest } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 
 const Home = () => {
   const { user } = useAuth();
+  const supabase = getSupabase();
 
   // Fetch featured products
   const { data: featuredData, isLoading } = useQuery({
-    queryKey: ['/api/products'],
+    queryKey: ['products'],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/api/products', undefined);
-      return res.json();
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(4);
+
+      if (error) throw error;
+      return { products: data };
     },
   });
 
   // Fetch product images
   const { data: imagesData } = useQuery({
-    queryKey: ['/api/products/images'],
+    queryKey: ['product-images', featuredData?.products?.map(p => p.id)],
     queryFn: async () => {
-      // Get all product IDs from featuredData
-      if (!featuredData || !featuredData.products || !featuredData.products.length) {
+      if (!featuredData?.products?.length) {
         return { images: {} };
       }
       
-      // For each product, fetch its images
       const productImagesMap: Record<number, any[]> = {};
       
       await Promise.all(
-        featuredData.products.slice(0, 4).map(async (product: any) => {
-          const res = await apiRequest('GET', `/api/products/${product.id}/images`, undefined);
-          const data = await res.json();
-          productImagesMap[product.id] = data.images || [];
+        featuredData.products.map(async (product: any) => {
+          const { data: images, error } = await supabase
+            .from('product_images')
+            .select('*')
+            .eq('product_id', product.id);
+            
+          if (!error && images) {
+            productImagesMap[product.id] = images;
+          }
         })
       );
       
@@ -44,7 +54,7 @@ const Home = () => {
   });
 
   // Get just the first 4 products for the featured section
-  const featuredProducts = featuredData?.products?.slice(0, 4) || [];
+  const featuredProducts = featuredData?.products || [];
   const productImages = imagesData?.images || {};
 
   return (
