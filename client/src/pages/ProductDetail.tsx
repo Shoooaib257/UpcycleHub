@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Heart } from "lucide-react";
@@ -15,29 +15,51 @@ const ProductDetail = () => {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const supabase = getSupabase();
   
   // Fetch product details
   const { data, isLoading } = useQuery({
-    queryKey: [`/api/products/${id}`],
+    queryKey: ['product', id],
     queryFn: async () => {
-      const res = await apiRequest('GET', `/api/products/${id}`, undefined);
-      return res.json();
+      // Fetch product
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (productError) throw productError;
+      if (!product) throw new Error('Product not found');
+
+      // Fetch product images
+      const { data: images, error: imagesError } = await supabase
+        .from('product_images')
+        .select('*')
+        .eq('product_id', id);
+
+      if (imagesError) throw imagesError;
+
+      return { 
+        product,
+        images: images || []
+      };
     },
   });
 
   // Fetch seller details
   const { data: sellerData, isLoading: isLoadingSeller } = useQuery({
-    queryKey: [`/api/users/${data?.product?.sellerId}`],
+    queryKey: ['user', data?.product?.seller_id],
     queryFn: async () => {
-      // For demonstration purposes, we'll return mock data since user endpoint isn't implemented
-      return { 
-        user: {
-          fullName: "John Doe",
-          createdAt: new Date(Date.now() - 3600 * 24 * 365 * 1000).toISOString() // A year ago
-        }
-      };
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('full_name, created_at')
+        .eq('id', data?.product?.seller_id)
+        .single();
+
+      if (error) throw error;
+      return { user };
     },
-    enabled: Boolean(data?.product?.sellerId),
+    enabled: Boolean(data?.product?.seller_id),
   });
 
   // Create conversation mutation
@@ -47,18 +69,22 @@ const ProductDetail = () => {
         throw new Error("You must be logged in to contact the seller");
       }
       
-      if (user.id === data?.product?.sellerId) {
+      if (user.id === data?.product?.seller_id) {
         throw new Error("You cannot contact yourself");
       }
       
-      const payload = {
-        productId: Number(id),
-        buyerId: user.id,
-        sellerId: data?.product?.sellerId
-      };
-      
-      const res = await apiRequest('POST', '/api/conversations', payload);
-      return res.json();
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .insert({
+          product_id: Number(id),
+          buyer_id: user.id,
+          seller_id: data?.product?.seller_id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return { conversation };
     },
     onSuccess: (data) => {
       toast({
@@ -151,8 +177,8 @@ const ProductDetail = () => {
   const formattedPrice = `$${(product.price / 100).toFixed(2)}`;
   
   // Calculate "Seller since" date
-  const sellerSinceYear = seller?.createdAt 
-    ? new Date(seller.createdAt).getFullYear() 
+  const sellerSinceYear = seller?.created_at 
+    ? new Date(seller.created_at).getFullYear() 
     : new Date().getFullYear();
 
   return (
@@ -198,11 +224,11 @@ const ProductDetail = () => {
             <div className="flex items-center">
               <Avatar className="h-10 w-10">
                 <AvatarFallback className="bg-neutral-200 text-neutral-600">
-                  {seller?.fullName.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+                  {seller?.full_name.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
               <div className="ml-3">
-                <p className="text-sm font-medium text-neutral-900">{seller?.fullName || 'Anonymous'}</p>
+                <p className="text-sm font-medium text-neutral-900">{seller?.full_name || 'Anonymous'}</p>
                 <p className="text-sm text-neutral-500">Seller since {sellerSinceYear}</p>
               </div>
             </div>
@@ -229,7 +255,7 @@ const ProductDetail = () => {
               <div className="flex justify-between py-1">
                 <dt className="text-sm text-neutral-500">Listed</dt>
                 <dd className="text-sm text-neutral-900">
-                  {product.createdAt ? format(new Date(product.createdAt), 'PPP') : 'Recently'}
+                  {product.created_at ? format(new Date(product.created_at), 'PPP') : 'Recently'}
                 </dd>
               </div>
             </div>
@@ -238,11 +264,11 @@ const ProductDetail = () => {
             <Button 
               className="flex-1 bg-primary hover:bg-emerald-700 text-white py-3 px-6 rounded-md font-medium"
               onClick={handleContactSeller}
-              disabled={createConversation.isPending || user?.id === product.sellerId}
+              disabled={createConversation.isPending || user?.id === product.seller_id}
             >
               {createConversation.isPending 
                 ? "Connecting..." 
-                : user?.id === product.sellerId
+                : user?.id === product.seller_id
                   ? "Your Listing"
                   : "Contact Seller"
               }
