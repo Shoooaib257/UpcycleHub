@@ -13,7 +13,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Bucket name constant for easier management
-const BUCKET_NAME = 'upcycle-hub';
+const BUCKET_NAME = import.meta.env.VITE_STORAGE_BUCKET_NAME || 'upcycle-hub';
 
 // Function to check if bucket exists and is accessible
 async function isBucketAccessible(): Promise<boolean> {
