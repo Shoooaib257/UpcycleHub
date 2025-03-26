@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ProductGrid from "@/components/ProductGrid";
-import { apiRequest } from "@/lib/queryClient";
+import { getSupabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,24 +29,32 @@ const Browse = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const supabase = getSupabase();
 
   // Fetch all products
   const { data: productsData, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ['/api/products', selectedCategory],
+    queryKey: ['products', selectedCategory],
     queryFn: async () => {
-      const url = selectedCategory 
-        ? `/api/products?category=${selectedCategory}` 
-        : '/api/products';
-      const res = await apiRequest('GET', url, undefined);
-      return res.json();
+      let query = supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (selectedCategory && selectedCategory !== 'all') {
+        query = query.eq('category', selectedCategory);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return { products: data || [] };
     },
   });
 
   // Fetch images for products
   const { data: imagesData, isLoading: isLoadingImages } = useQuery({
-    queryKey: ['/api/products/images', productsData?.products],
+    queryKey: ['product-images', productsData?.products?.map(p => p.id)],
     queryFn: async () => {
-      if (!productsData || !productsData.products || !productsData.products.length) {
+      if (!productsData?.products?.length) {
         return { images: {} };
       }
       
@@ -54,9 +62,14 @@ const Browse = () => {
       
       await Promise.all(
         productsData.products.map(async (product: Product) => {
-          const res = await apiRequest('GET', `/api/products/${product.id}/images`, undefined);
-          const data = await res.json();
-          productImagesMap[product.id] = data.images || [];
+          const { data: images, error } = await supabase
+            .from('product_images')
+            .select('*')
+            .eq('product_id', product.id);
+            
+          if (!error && images) {
+            productImagesMap[product.id] = images;
+          }
         })
       );
       
