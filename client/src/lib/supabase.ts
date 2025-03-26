@@ -1,16 +1,31 @@
-import { createClient } from '@supabase/supabase-js';
+// Import only what we need from Supabase
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Get Supabase URL and anon key from environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Log for debugging (will be removed in production)
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials not found in environment variables.');
-}
+// Create Supabase client lazily to reduce initial load
+let supabaseInstance: SupabaseClient | null = null;
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Export a function to get the Supabase client
+export const getSupabase = (): SupabaseClient => {
+  if (!supabaseInstance) {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('Supabase credentials not found in environment variables.');
+    }
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      }
+    });
+  }
+  return supabaseInstance;
+};
+
+// For backward compatibility
+export const supabase = getSupabase();
 
 // Bucket name constant for easier management
 const BUCKET_NAME = import.meta.env.VITE_STORAGE_BUCKET_NAME || 'upcycle-hub';

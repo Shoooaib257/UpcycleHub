@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiRequest } from "@/lib/queryClient";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { User } from "@shared/schema";
 
 type AuthContextType = {
@@ -30,6 +30,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
+        // Get Supabase client
+        const supabase = getSupabase();
+        
         // First, check Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
@@ -73,6 +76,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
+    // Get Supabase client
+    const supabase = getSupabase();
+    
     // Set up auth state subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -109,6 +115,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
+      // Get Supabase client
+      const supabase = getSupabase();
+      
       // First try Supabase authentication
       const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
         email,
@@ -163,6 +172,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signup = async (userData: SignupData) => {
     setIsLoading(true);
     try {
+      // Get Supabase client
+      const supabase = getSupabase();
+      
       // First try to register with Supabase
       const { data: supabaseData, error: supabaseError } = await supabase.auth.signUp({
         email: userData.email,
@@ -219,6 +231,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     setIsLoading(true);
     try {
+      // Get Supabase client
+      const supabase = getSupabase();
+      
       // Sign out from Supabase
       const { error: supabaseError } = await supabase.auth.signOut();
       
